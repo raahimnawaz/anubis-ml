@@ -1,0 +1,11 @@
+# Python deps layered on top of the official rootproject/root image (which already
+# provides ROOT + PyROOT + a matching Python). Kept separate from environment.yml,
+# which is the conda spec for a full-from-scratch install.
+numpy
+pandas
+pyarrow
+scikit-learn
+matplotlib
+uproot
+awkward
+pytest

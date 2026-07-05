@@ -1,0 +1,6 @@
+# Normalize to LF in the repo so Dockerfiles / shell / Python don't break when the repo
+# is checked out on Windows (CRLF line endings can make container scripts fail).
+* text=auto eol=lf
+*.png binary
+*.root binary
+*.parquet binary

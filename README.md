@@ -48,10 +48,28 @@ arrays per event:
 Units are ATLAS default: **MeV, mm, ns**. This repo runs against a 9-file local subset
 (~240 MB) placed in `data/`; only `.gitkeep` is committed — download your own from the portal.
 
-## Setup
+## Quickstart (Docker — recommended)
 
-ROOT's Python bindings (PyROOT / `RDataFrame`) ship only for **Linux/macOS** — there is no
-conda or pip build for native Windows. On Windows, run everything inside **WSL2**:
+ROOT is notoriously painful to install, so the repo ships a container built on CERN's
+official ROOT image. This is the reproducible path — identical environment on any machine:
+
+```bash
+docker compose build
+# smoke-test the whole ROOT pipeline on a synthetic sample (no real data needed):
+docker compose run --rm anubis bash -c \
+  "python3 tests/make_sample_root.py && python3 src/features_segments.py data/sample.ANALYSIS.root && python3 src/train_segments.py"
+# ...or run against real data you dropped in ./data (bind-mounted into the container):
+docker compose run --rm anubis python3 src/features_segments.py
+docker compose run --rm anubis pytest tests/
+```
+
+The exact same in-container pipeline runs in CI (see the `pipeline` job in
+[.github/workflows/tests.yml](.github/workflows/tests.yml)).
+
+## Setup (conda / WSL — alternative)
+
+If you'd rather not use Docker: ROOT's Python bindings ship only for **Linux/macOS** — there is
+no conda or pip build for native Windows. On Windows, run everything inside **WSL2**:
 
 ```bash
 # in WSL (Ubuntu) — one time:
@@ -96,8 +114,13 @@ src/
   features_segments.py  Task 2: per-muon segment table  -> segments.parquet
   train_segments.py     Task 2: acceptance vs efficiency classifier
   make_figures.py       Task 2: acceptance map + turn-on curve
-tests/                  unit tests for geometry.py (run in CI)
+tests/
+  test_geometry.py      geometry unit tests (run in CI, no ROOT)
+  make_sample_root.py   synthetic .root fixture generator for the in-container smoke test
 docs/figures/           generated plots embedded above
+Dockerfile              ROOT + ML env, built on rootproject/root
+docker-compose.yml      convenience wrapper (bind-mounts ./data)
+environment.yml         conda spec (the non-Docker path)
 ```
 
 See [WRITEUP.md](WRITEUP.md) for the full narrative of both tasks — including the failed

@@ -1,0 +1,18 @@
+# Convenience wrapper so you don't have to remember the volume-mount incantation.
+#
+#   docker compose build
+#   docker compose run --rm anubis python src/features_segments.py
+#   docker compose run --rm anubis pytest tests/
+#
+# The bind-mount maps your working copy into the container, so edits and outputs
+# (data/*.parquet, docs/figures/*.png) land back on the host. Drop your downloaded
+# .root files in ./data and they're visible inside the container automatically.
+services:
+  anubis:
+    build: .
+    image: anubis-ml
+    volumes:
+      - .:/app
+    working_dir: /app
+    environment:
+      - PYTHONPATH=/app/src

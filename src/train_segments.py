@@ -66,13 +66,22 @@ def main():
                        ALL_FEATURES, df["has_segment"].astype(int).values)
 
     region = df[df["dR_proanub"] < 0.3].reset_index(drop=True)
-    auc_b = fit_report("efficiency (muons pointing at proANUBIS, dR<0.3)", region,
-                       EFF_FEATURES, region["has_segment"].astype(int).values)
+    if region["has_segment"].nunique() < 2:
+        # e.g. a tiny/synthetic sample where every in-acceptance muon has a segment:
+        # AUC is undefined with one class. Report instead of emitting NaN.
+        print("\nefficiency model skipped: only one class present in the acceptance "
+              f"region (P(segment)={region['has_segment'].mean():.3f} over {len(region)} muons)")
+        auc_b = None
+
+    else:
+        auc_b = fit_report("efficiency (muons pointing at proANUBIS, dR<0.3)", region,
+                           EFF_FEATURES, region["has_segment"].astype(int).values)
 
     print(f"\n{'#'*60}")
     print(f"RESULT:  acceptance AUC = {auc_a:.4f}  (mostly geometry/selection)")
-    print(f"         efficiency AUC = {auc_b:.4f}  (the real detector-response signal,")
-    print(f"                         on a {region['has_segment'].mean()*100:.1f}%-positive base rate)")
+    if auc_b is not None:
+        print(f"         efficiency AUC = {auc_b:.4f}  (the real detector-response signal,")
+        print(f"                         on a {region['has_segment'].mean()*100:.1f}%-positive base rate)")
     print(f"{'#'*60}")
 
 
