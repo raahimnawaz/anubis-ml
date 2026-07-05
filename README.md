@@ -1,85 +1,104 @@
 # anubis-ml
 
-Machine learning on real ATLAS proANUBIS calibration data, using ROOT's `RDataFrame`.
+[![tests](https://github.com/raahimnawaz/anubis-ml/actions/workflows/tests.yml/badge.svg)](https://github.com/raahimnawaz/anubis-ml/actions/workflows/tests.yml)
+[![python](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
+[![ROOT](https://img.shields.io/badge/ROOT-6.40-orange.svg)](https://root.cern/)
+[![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**The task:** predict whether a muon came from a Z boson decay, from its kinematics.
-It's a deliberately instructive problem — see [Why this task](#why-this-task).
+Machine learning on **real ATLAS proANUBIS calibration data** (13.6 TeV LHC proton–proton
+collisions), read straight from CERN's ROOT `TTree` files with `RDataFrame`.
+
+Two supervised tasks, chosen so each teaches something about doing ML on real detector data
+rather than just reporting a number:
+
+| # | Task | Headline | The lesson |
+|---|------|----------|------------|
+| **1** | Is a muon from a **Z boson**? | AUC 0.70 (kinematics only) | A feature can be defeated by how the data was *skimmed* — the invariant-mass trick is impossible here because the Z's partner muon was removed upstream. |
+| **2** | Does a muon leave a **proANUBIS segment**? | ~98% detector efficiency | A headline AUC of 0.99 can just be re-deriving your *event selection*; the real physics is the efficiency and its falloff at the detector edge. |
+
+Both tasks share one theme that transfers directly to robotics perception/estimation:
+**understand how your data was produced and selected before you trust a model on it.**
+
+## Task 2 in one picture
+
+proANUBIS is a prototype detector sitting at a fixed direction in ATLAS. A muon either points
+at it (and leaves a reconstructed track *segment*) or it doesn't. Learning that from the muon's
+direction reconstructs the detector's **field of view** — the same shape as a sensor-coverage
+map in robotics. The bright blob is the detector; the dark blob is the **η-flipped control
+sample** (muons aimed at the empty opposite side, so no segment); everything else is empty
+because the data is skimmed to just those two regions:
+
+![proANUBIS acceptance map](docs/figures/acceptance_map.png)
+![proANUBIS acceptance turn-on](docs/figures/acceptance_turnon.png)
 
 ## Data
 
-[ATLAS proANUBIS Calibration Data Set](https://opendata.cern.ch/record/atlas-93943) — real (not simulated)
-13.6 TeV pp collision data from 2024-2025, 49.1M events across 423 ROOT files (6.0 GiB total),
-DOI `10.7483/OPENDATA.ATLAS.2J92.7ASX`.
+[ATLAS proANUBIS Calibration Data Set](https://opendata.cern.ch/record/atlas-93943) — real
+(not simulated) 13.6 TeV pp data, 2024–2025. 49.1M events / 423 ROOT files / 6.0 GiB,
+DOI [`10.7483/OPENDATA.ATLAS.2J92.7ASX`](https://doi.org/10.7483/OPENDATA.ATLAS.2J92.7ASX).
 
-Each file is a ROOT TTree named `analysis`. Per-event it stores variable-length arrays of
-muons (`muon_pt/eta/phi/charge`, plus truth flags `muon_isFromZ`, `muon_isFromJPsi`), jets
-(`jet_pt/eta/phi/M/EMRatio`), and muon segments (`mseg_x/y/z` + directions — the proANUBIS
-trajectory info), alongside event-level trigger flags and timing. Units are ATLAS default:
-**MeV, mm, ns**.
+Each file holds a ROOT `TTree` named `analysis`, one row per collision, with variable-length
+arrays per event:
 
-This repo works against a 9-file local subset (~240 MB) in `data/`. Only `.gitkeep` is
-committed; download your own files from the portal.
+- **muons** — `muon_pt/eta/phi/charge`, plus truth flags `muon_isFromZ`, `muon_isFromJPsi`
+- **jets** — `jet_pt/eta/phi/M/EMRatio`
+- **muon segments** — `mseg_x/y/z` + direction cosines (the proANUBIS trajectory hits)
+- **event-level** — trigger bits (`diMuTrigger`, `singleMuTrigger`, …), pileup, timing
 
-## Why this task
-
-Every muon in this dataset already passed a muon trigger, so they're *all* high-pt — you
-cannot separate Z muons from the rest by pt alone. The original plan was to engineer the
-**dimuon invariant mass** (Z → two opposite-charge muons at ~91 GeV) as the killer feature.
-
-**That plan failed, and the failure is the most useful thing in this repo.** The data is
-skimmed to keep only muons pointing at proANUBIS (one side of the detector), so ~99.9% of
-events contain a *single* muon — the Z's partner was thrown away before the file was written.
-No partner ⇒ no dimuon mass. Full story in [WRITEUP.md](WRITEUP.md).
-
-So `train.py` does the honest comparison instead:
-
-- **Model A ("full")** — kinematics + trigger bits + object counts → **AUC ~0.89**, but mostly
-  from reading the `diMuTrigger` bit (a proxy for "the full event had two muons").
-- **Model B ("kinematics only")** — the muon's own motion, no shortcuts → **AUC ~0.70**. This is
-  the real "can you tell a Z muon from how it moves?" answer. Modest, *because* the skim removed
-  the partner that would have made it easy.
-
-The takeaway — *understand how your data was selected before you trust a feature* — transfers
-directly to robotics perception/estimation.
-
-(Note: the J/ψ trigger stream isn't in this subset — only 3 J/ψ muons across all 9 files — so
-"Z vs J/ψ" isn't viable here either.)
+Units are ATLAS default: **MeV, mm, ns**. This repo runs against a 9-file local subset
+(~240 MB) placed in `data/`; only `.gitkeep` is committed — download your own from the portal.
 
 ## Setup
 
-ROOT's Python bindings (PyROOT/RDataFrame) are Linux/macOS only — there is **no** conda or pip
-build for native Windows. On Windows, run everything inside **WSL2**:
+ROOT's Python bindings (PyROOT / `RDataFrame`) ship only for **Linux/macOS** — there is no
+conda or pip build for native Windows. On Windows, run everything inside **WSL2**:
 
 ```bash
-# in WSL (Ubuntu):
-# 1. install miniforge (one time)
+# in WSL (Ubuntu) — one time:
 curl -fsSL -o ~/miniforge.sh https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
 bash ~/miniforge.sh -b -p ~/miniforge3
-
-# 2. create the env
 ~/miniforge3/bin/conda env create -f /mnt/c/Users/Raahim/Downloads/anubis-ml/environment.yml
-
-# 3. sanity check
-~/miniforge3/envs/anubis-ml/bin/python -c "import ROOT; print(ROOT.__version__)"
+~/miniforge3/envs/anubis-ml/bin/python -c "import ROOT; print(ROOT.__version__)"   # sanity check
 ```
 
-On Linux/macOS natively it's just `conda env create -f environment.yml && conda activate anubis-ml`.
+On Linux/macOS natively: `conda env create -f environment.yml && conda activate anubis-ml`.
 
 ## Pipeline
 
-Run from the project root (in WSL, prefix with the env's python as above):
+Run from the repo root (in WSL, prefix with the env's python, e.g.
+`~/miniforge3/envs/anubis-ml/bin/python`):
 
 ```bash
-python src/explore.py data/<file>.root   # 1. dump branches / types / summary stats
-python src/features.py                    # 2. all data/*.root -> data/muons.parquet (per-muon table)
-python src/train.py                       # 3. full vs kinematics-only models, print AUC comparison
-python src/diagnose.py                    # (optional) univariate AUC + ablations — how we found the skim
+python src/explore.py data/<file>.root    # inspect: branches, types, summary stats
+
+# Task 1 — Z-muon tagging
+python src/features.py                     # data/*.root -> data/muons.parquet
+python src/train.py                        # full vs kinematics-only models
+python src/diagnose.py                     # (optional) ablations that exposed the skim
+
+# Task 2 — proANUBIS segment detection
+python src/features_segments.py            # data/*.root -> data/segments.parquet
+python src/train_segments.py               # acceptance vs efficiency models
+python src/make_figures.py                 # regenerate docs/figures/*.png
+
+pytest tests/                              # geometry unit tests (no ROOT / data needed)
 ```
 
-- `src/explore.py` — inspects a file: every branch, its type, scalar summary stats, quick histograms.
-- `src/features.py` — explodes per-event muon arrays into a flat per-muon table of honest
-  features (muon kinematics + event context that survives the skim); writes `data/muons.parquet`.
-- `src/train.py` — trains `HistGradientBoostingClassifier` on the full feature set and on
-  kinematics only, reports ROC-AUC / precision / recall for each, and the gap between them.
-- `src/diagnose.py` — the univariate-AUC and ablation script that exposed why the original
-  dimuon-mass idea was dead (see [WRITEUP.md](WRITEUP.md)).
+## Project layout
+
+```
+src/
+  explore.py            inspect any .root file's TTree
+  geometry.py           pure-NumPy proANUBIS geometry (Delta-R); no ROOT dependency
+  features.py           Task 1: per-muon feature table  -> muons.parquet
+  train.py              Task 1: full vs kinematics-only classifier
+  diagnose.py           Task 1: univariate-AUC / ablation study
+  features_segments.py  Task 2: per-muon segment table  -> segments.parquet
+  train_segments.py     Task 2: acceptance vs efficiency classifier
+  make_figures.py       Task 2: acceptance map + turn-on curve
+tests/                  unit tests for geometry.py (run in CI)
+docs/figures/           generated plots embedded above
+```
+
+See [WRITEUP.md](WRITEUP.md) for the full narrative of both tasks — including the failed
+hypothesis in Task 1, which is the most useful part.

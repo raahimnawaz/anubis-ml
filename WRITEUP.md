@@ -63,17 +63,67 @@ than chance (~0.70), and pt does most of that work.
 That ~0.70 is the real, defensible result. It's modest *because* of the skim, and
 saying so plainly is the correct scientific outcome.
 
+That ~0.70 is the real, defensible result. It's modest *because* of the skim, and
+saying so plainly is the correct scientific outcome.
+
+---
+
+# TASK 2 — proANUBIS segment detection (detector efficiency)
+
+Task 1 re-derived standard ATLAS muon physics. Task 2 uses the part of the dataset that
+is genuinely about *this detector*: the reconstructed **muon segments** (`mseg_*`), the
+track hits proANUBIS actually recorded.
+
+## Goal
+
+Given a muon, predict whether proANUBIS reconstructed a segment for it (`has_segment`).
+This is a detector **acceptance / efficiency** problem — the physics analogue of "does my
+sensor detect an object, as a function of where it is in the field of view." We restrict to
+single-muon events (~99.9% of the data) so the event's segment count unambiguously belongs
+to that one muon.
+
+The natural feature is geometric: **Delta-R**, the angular distance from the muon's
+direction to proANUBIS's fixed direction (eta=0.956, phi=1.5). Unlike Task 1's invariant
+mass, the object we need (the segment) *is* in the file, so this feature actually works.
+
+## Two models, on purpose
+
+| model                         | data                         | ROC-AUC | what it really measures |
+|-------------------------------|------------------------------|---------|-------------------------|
+| **A — acceptance**            | full sample (788k muons)     | **0.995** | mostly geometry: signal muons point at the detector, control muons point away |
+| **B — efficiency**            | only muons with dR < 0.3 (413k) | **0.981** on a 98.4% base rate | the genuine detector response: of muons that *should* be seen, which aren't |
+
+Model A's 0.995 looks spectacular but is largely a **re-derivation of the event selection** —
+the dataset deliberately mixes proANUBIS-pointing muons with an eta-flipped control sample, and
+Delta-R just tells them apart. `docs/figures/acceptance_map.png` shows this literally: a bright
+P≈1 blob at the proANUBIS direction and a dark P≈0 blob at the mirror-image eta (the control),
+with nothing in between.
+
+Model B is the more honest question — restricted to muons that already point at the detector,
+where ~98.4% leave a segment. Its AUC stays high (0.981) because the residual inefficiency isn't
+random: it sits right at the **acceptance edge**, so fine Delta-R still separates the missed
+muons, while pt barely matters. The physics finding is that proANUBIS's response is almost
+entirely **geometric** — a sharp field-of-view with a thin turn-on edge — not kinematic.
+
+**Lesson (a mirror of Task 1's):** a high headline AUC can mean the model learned your
+*selection*, not your *physics*. The honest move is to ablate down to the regime where the
+trivial signal is held constant, and report what's left.
+
 ## Files
 
-- `src/explore.py`  — inspect a ROOT file's branches / types / summary stats.
-- `src/features.py` — explode per-event muon arrays into a per-muon table -> parquet.
-- `src/train.py`    — full vs kinematics-only comparison.
-- `src/diagnose.py` — the univariate-AUC / ablation script that exposed the null result.
+- `src/explore.py`           — inspect a ROOT file's branches / types / summary stats.
+- `src/geometry.py`          — pure-NumPy proANUBIS Delta-R helper (unit-tested, no ROOT).
+- `src/features.py`          — Task 1 per-muon table -> `muons.parquet`.
+- `src/train.py`             — Task 1 full vs kinematics-only comparison.
+- `src/diagnose.py`          — Task 1 ablation script that exposed the skim.
+- `src/features_segments.py` — Task 2 per-muon table -> `segments.parquet`.
+- `src/train_segments.py`    — Task 2 acceptance vs efficiency comparison.
+- `src/make_figures.py`      — Task 2 acceptance map + turn-on curve.
+- `tests/`                   — geometry unit tests (run in CI, no ROOT/data needed).
 
 ## If continuing
 
-The unused, genuinely proANUBIS-specific data is the **muon segments** (`mseg_x/y/z`
-+ direction cosines) — the reconstructed trajectory hits in the prototype detector.
-A more detector-focused task (e.g. does a muon have an associated proANUBIS segment,
-or regress the segment direction from muon kinematics) would use the part of this
-dataset that is actually novel, rather than re-deriving standard ATLAS muon physics.
+A true estimation task would **regress the segment direction** (`mseg_?Dir`) from the muon
+kinematics, or model efficiency vs. pileup — closer to sensor-fusion/state-estimation work.
+Getting the full 423-file release would help only a segment-hungry deep model, not these
+tree-based baselines (see the download discussion in the project notes).

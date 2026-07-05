@@ -1,0 +1,23 @@
+name: tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  # Pure-Python unit tests for the physics/geometry helpers. Deliberately does NOT
+  # install ROOT -- the geometry module has no ROOT dependency, so CI stays fast and
+  # runs on a stock Python image. (The ROOT-dependent feature/train scripts are
+  # exercised locally against the data, not in CI.)
+  geometry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test deps
+        run: pip install numpy pytest
+      - name: Run geometry unit tests
+        run: pytest tests/ -v

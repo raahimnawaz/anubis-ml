@@ -12,4 +12,5 @@ dependencies:
   - scikit-learn
   - matplotlib
   - jupyterlab
+  - pytest             # unit tests for the geometry helpers
   - pip
