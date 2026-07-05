@@ -1,0 +1,15 @@
+name: anubis-ml
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - root              # PyROOT + RDataFrame
+  - uproot             # pure-python fallback / quick reads, no ROOT C++ needed
+  - awkward
+  - numpy
+  - pandas
+  - pyarrow            # parquet engine for the flat feature table
+  - scikit-learn
+  - matplotlib
+  - jupyterlab
+  - pip
